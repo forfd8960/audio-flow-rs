@@ -56,6 +56,9 @@ tauri-plugin-notification = "2.1"
 tauri-plugin-log = { version = "2", features = ["tracing"] }
 tauri-plugin-window-state = "2"
 
+[dev-dependencies]
+tempfile = "3"
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]

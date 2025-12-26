@@ -9,3 +9,6 @@ pub mod network;
 pub mod shortcut;
 pub mod tray;
 pub mod notification;
+pub mod events;
+pub mod window;
+pub mod lifecycle;
