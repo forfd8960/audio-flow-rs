@@ -344,3 +344,214 @@ impl Drop for AudioCapturer {
         let _ = self.stop();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_audio_frame_new() {
+        let frame = AudioFrame::new(
+            vec![0.5, -0.5, 0.25],
+            16000,
+            1,
+            1000,
+        );
+        assert_eq!(frame.samples.len(), 3);
+        assert_eq!(frame.sample_rate, 16000);
+        assert_eq!(frame.channels, 1);
+        assert_eq!(frame.timestamp_ns, 1000);
+    }
+
+    #[test]
+    fn test_audio_frame_to_mono_single_channel() {
+        let frame = AudioFrame::new(
+            vec![0.5, -0.5],
+            16000,
+            1,
+            1000,
+        );
+        let mono = frame.to_mono();
+        assert_eq!(mono.channels, 1);
+        assert_eq!(mono.samples, vec![0.5, -0.5]);
+    }
+
+    #[test]
+    fn test_audio_frame_to_mono_stereo() {
+        // Stereo frame with 4 samples: [L, R, L, R]
+        let frame = AudioFrame::new(
+            vec![0.5, 0.25, -0.5, -0.25],
+            16000,
+            2,
+            1000,
+        );
+        let mono = frame.to_mono();
+        assert_eq!(mono.channels, 1);
+        assert_eq!(mono.samples.len(), 2);
+        // (0.5 + 0.25) / 2 = 0.375
+        assert!((mono.samples[0] - 0.375).abs() < 0.001);
+        // (-0.5 + -0.25) / 2 = -0.375
+        assert!((mono.samples[1] - (-0.375)).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_audio_config_default() {
+        let config = AudioConfig::default();
+        assert!(config.device_id.is_none());
+        assert_eq!(config.sample_rate, 48000);
+        assert_eq!(config.channels, 1);
+        assert_eq!(config.buffer_size_ms, 20);
+    }
+
+    #[test]
+    fn test_audio_config_custom() {
+        let config = AudioConfig {
+            device_id: Some("test-device".to_string()),
+            sample_rate: 16000,
+            channels: 2,
+            buffer_size_ms: 40,
+        };
+        assert_eq!(config.device_id, Some("test-device".to_string()));
+        assert_eq!(config.sample_rate, 16000);
+        assert_eq!(config.channels, 2);
+        assert_eq!(config.buffer_size_ms, 40);
+    }
+
+    #[test]
+    fn test_ring_buffer_new() {
+        let buffer = RingBuffer::new(1024);
+        // capacity is a public field
+        assert_eq!(buffer.capacity, 1024);
+    }
+
+    #[test]
+    fn test_ring_buffer_write_read() {
+        let buffer = RingBuffer::new(1024);
+        let data = vec![1.0, 2.0, 3.0];
+
+        let written = buffer.write(&data);
+        assert_eq!(written, 3);
+
+        let read = buffer.read(3).unwrap();
+        assert_eq!(read, data);
+    }
+
+    #[test]
+    fn test_ring_buffer_partial_read() {
+        let buffer = RingBuffer::new(1024);
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+
+        buffer.write(&data);
+
+        let read = buffer.read(2).unwrap();
+        assert_eq!(read, vec![1.0, 2.0]);
+
+        // Read remaining
+        let read2 = buffer.read(3).unwrap();
+        assert_eq!(read2, vec![3.0, 4.0, 5.0]);
+    }
+
+    #[test]
+    fn test_ring_buffer_wrap_around() {
+        let buffer = RingBuffer::new(10);
+        let data1 = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let data2 = vec![8.0, 9.0, 10.0];
+
+        buffer.write(&data1);
+        buffer.read(5).unwrap(); // Leave 2 items
+        buffer.write(&data2); // Should wrap
+
+        let read = buffer.read(5).unwrap();
+        assert_eq!(read, vec![6.0, 7.0, 8.0, 9.0, 10.0]);
+    }
+
+    #[test]
+    fn test_ring_buffer_overflow() {
+        let buffer = RingBuffer::new(10);
+        let large_data = vec![1.0; 20];
+
+        let written = buffer.write(&large_data);
+        // The ring buffer reserves 1 slot, so only 9 can fit
+        assert_eq!(written, 9);
+
+        let read = buffer.read(9).unwrap();
+        assert_eq!(read.len(), 9);
+        assert_eq!(read, vec![1.0; 9]);
+    }
+
+    #[test]
+    fn test_ring_buffer_read_empty() {
+        let buffer = RingBuffer::new(1024);
+        let result = buffer.read(100);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_ring_buffer_available() {
+        let buffer = RingBuffer::new(1024);
+        assert_eq!(buffer.available(), 0);
+
+        buffer.write(&vec![1.0; 100]);
+        assert_eq!(buffer.available(), 100);
+
+        buffer.read(50).unwrap();
+        assert_eq!(buffer.available(), 50);
+    }
+
+    #[test]
+    fn test_ring_buffer_clear() {
+        let buffer = RingBuffer::new(1024);
+        buffer.write(&vec![1.0; 100]);
+        assert_eq!(buffer.available(), 100);
+
+        buffer.clear();
+        assert_eq!(buffer.available(), 0);
+    }
+
+    #[test]
+    fn test_audio_device_info_default() {
+        let info = AudioDeviceInfo {
+            name: "Test Device".to_string(),
+            id: "test-id".to_string(),
+            sample_rates: vec![44100, 48000],
+            channels: 2,
+        };
+        assert_eq!(info.name, "Test Device");
+        assert_eq!(info.id, "test-id");
+        assert_eq!(info.sample_rates.len(), 2);
+        assert_eq!(info.channels, 2);
+    }
+
+    #[test]
+    fn test_audio_capturer_default() {
+        let capturer = AudioCapturer::new();
+        assert!(!capturer.is_running());
+    }
+
+    #[test]
+    fn test_audio_frame_clone() {
+        let frame = AudioFrame::new(vec![0.5, -0.5], 16000, 1, 1000);
+        let cloned = frame.clone();
+        assert_eq!(cloned.samples, frame.samples);
+        assert_eq!(cloned.sample_rate, frame.sample_rate);
+        assert_eq!(cloned.channels, frame.channels);
+        assert_eq!(cloned.timestamp_ns, frame.timestamp_ns);
+    }
+
+    #[test]
+    fn test_ring_buffer_thread_safe() {
+        use std::thread;
+
+        let buffer = Arc::new(RingBuffer::new(1024));
+        let buffer_clone = buffer.clone();
+
+        let handle = thread::spawn(move || {
+            buffer_clone.write(&vec![1.0, 2.0, 3.0]);
+        });
+
+        handle.join().unwrap();
+
+        let read = buffer.read(3).unwrap();
+        assert_eq!(read, vec![1.0, 2.0, 3.0]);
+    }
+}
