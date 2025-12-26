@@ -3,5 +3,5 @@
 pub mod manager;
 pub mod secure_storage;
 
-pub use manager::{ConfigManager, UserConfig, ApiConfig, AudioSettings, InputSettings, UiSettings};
-pub use secure_storage::SecureStorage;
+pub use manager::{ConfigManager, UserConfig, ApiConfig, AudioSettings, InputSettings, UiSettings, HotkeySettings};
+pub use secure_storage::{SecureStorage, SecureStorageError, ApiKeyStorage, ElevenLabsKeyStorage};

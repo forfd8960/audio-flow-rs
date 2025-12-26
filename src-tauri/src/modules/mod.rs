@@ -7,3 +7,5 @@ pub mod config;
 pub mod input;
 pub mod network;
 pub mod shortcut;
+pub mod tray;
+pub mod notification;
