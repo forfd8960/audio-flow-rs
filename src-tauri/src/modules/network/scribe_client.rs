@@ -3,6 +3,7 @@
 //! 封装 WebSocket 客户端，提供 ElevenLabs Scribe 语音转写功能
 
 use crate::error::NetworkError;
+use crate::modules::audio::VadLevel;
 use crate::modules::network::websocket::{ConnectionState, WebSocketClient, WebSocketConfig, WsMessage};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -350,6 +351,56 @@ impl ScribeClient {
     /// 获取 session ID
     pub fn session_id(&self) -> Option<String> {
         self.session_id.lock().unwrap().clone()
+    }
+
+    /// 接收转写响应 (供命令使用)
+    pub async fn receive_response(&mut self) -> Result<Option<TranscriptionResult>, NetworkError> {
+        if let Some(event) = self.receive_event().await {
+            match event {
+                ScribeEvent::PartialTranscript { text, .. } => {
+                    Ok(Some(TranscriptionResult {
+                        text,
+                        confidence: 0.0,
+                        timestamp: Utc::now(),
+                        is_final: false,
+                    }))
+                }
+                ScribeEvent::CommittedTranscript { text, confidence, .. } => {
+                    Ok(Some(TranscriptionResult {
+                        text,
+                        confidence,
+                        timestamp: Utc::now(),
+                        is_final: true,
+                    }))
+                }
+                ScribeEvent::Error { message, .. } => {
+                    Err(NetworkError::ReceiveError(message))
+                }
+                ScribeEvent::Disconnected => {
+                    Err(NetworkError::ConnectionLost)
+                }
+                _ => Ok(None),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// 更新配置
+    pub fn update_config(&mut self, config: ScribeConfig) {
+        self.config = config;
+    }
+
+    /// VAD 级别
+    pub fn vad_level(&self) -> VadLevel {
+        // 默认返回 Balanced，实际实现可以根据配置调整
+        VadLevel::Balanced
+    }
+
+    /// 设置 VAD 级别
+    pub fn set_vad_level(&mut self, _level: VadLevel) {
+        // VAD 设置在 WebSocket 消息中发送
+        // 实际实现需要在配置时发送 VAD 设置
     }
 }
 

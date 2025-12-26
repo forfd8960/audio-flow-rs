@@ -8,4 +8,4 @@ pub mod vad;
 
 pub use capture::{AudioCapturer, AudioConfig, AudioDeviceInfo, AudioFrame, RingBuffer};
 pub use resampler::{AudioResampler, BatchResampler};
-pub use vad::{VadConfig, VadState, VoiceActivityDetector};
+pub use vad::{VadConfig, VadLevel, VadState, VoiceActivityDetector};

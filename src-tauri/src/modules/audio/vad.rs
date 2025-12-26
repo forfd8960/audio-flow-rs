@@ -4,6 +4,18 @@
 
 use std::f32::consts::LN_10;
 
+/// VAD 级别 (用于 WebSocket 配置)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VadLevel {
+    /// 激进模式 - 更容易检测到语音，可能有更多误检
+    #[default]
+    Aggressive,
+    /// 平衡模式 - 正常的检测灵敏度
+    Balanced,
+    /// 宽松模式 - 更难检测到语音，可能遗漏短暂的语音
+    Relaxed,
+}
+
 /// VAD 配置
 #[derive(Debug, Clone, Copy)]
 pub struct VadConfig {

@@ -31,6 +31,13 @@ impl Default for ConnectionState {
     }
 }
 
+impl ConnectionState {
+    /// 检查是否已连接
+    pub fn is_connected(&self) -> bool {
+        matches!(self, ConnectionState::Connected)
+    }
+}
+
 impl std::fmt::Display for ConnectionState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
