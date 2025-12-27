@@ -24,18 +24,8 @@ pub use state::AppState;
 
 const APP_DIR: &str = "audio-flow";
 
-/// 初始化应用
-pub fn init_app() -> Result<()> {
-    use tracing_subscriber::fmt;
-    fmt::init();
-    Ok(())
-}
-
 /// 运行应用
-#[allow(dead_code)]
 pub fn run() -> Result<()> {
-    init_app()?;
-
     let config_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join(APP_DIR);

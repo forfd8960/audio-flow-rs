@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.audioflow.app",
   "build": {
-    "beforeDevCommand": "yarn dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "yarn build"
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "withGlobalTauri": true,
@@ -29,8 +29,7 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": false,
-        "center": true,
-        "focusable": false
+        "center": true
       }
     ],
     "security": {

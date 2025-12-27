@@ -221,7 +221,11 @@ impl AudioCapturer {
         self.device = if let Some(id) = &self.config.device_id {
             let mut devices = self.host.input_devices()
                 .map_err(|e| AudioError::ConfigurationFailed(e.to_string()))?;
-            devices.find(|d| d.name().map(|n| n == *id).unwrap_or(false))
+            devices.find(|d| {
+                d.description()
+                    .map(|desc| desc.name() == id.as_str())
+                    .unwrap_or(false)
+            })
         } else {
             self.host.default_input_device()
         };
@@ -322,8 +326,9 @@ impl AudioCapturer {
 
 /// 构建设备信息
 fn build_device_info(device: &Device) -> Result<AudioDeviceInfo, AudioError> {
-    let name = device.name()
+    let description = device.description()
         .map_err(|e| AudioError::ConfigurationFailed(e.to_string()))?;
+    let device_name = description.name().to_string();
 
     let default_config = device.default_input_config()
         .map_err(|e| AudioError::ConfigurationFailed(e.to_string()))?;
@@ -332,8 +337,8 @@ fn build_device_info(device: &Device) -> Result<AudioDeviceInfo, AudioError> {
     let sample_rate: u32 = default_config.sample_rate();
 
     Ok(AudioDeviceInfo {
-        name: name.clone(),
-        id: name,
+        name: device_name.clone(),
+        id: device_name,
         sample_rates: vec![sample_rate],
         channels,
     })

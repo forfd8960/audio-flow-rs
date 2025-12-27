@@ -34,7 +34,7 @@ impl Default for KeyboardConfig {
 #[derive(Debug)]
 pub struct KeyboardInjector {
     /// enigo 实例
-    enigo: Enigo,
+    enigo: Option<Enigo>,
     /// 配置
     config: KeyboardConfig,
     /// 是否正在运行
@@ -59,11 +59,14 @@ impl KeyboardInjector {
             ..Default::default()
         };
         let enigo = match Enigo::new(&settings) {
-            Ok(e) => e,
+            Ok(e) => {
+                tracing::info!("Keyboard injector initialized successfully");
+                Some(e)
+            }
             Err(e) => {
-                tracing::warn!("Failed to create Enigo instance: {:?}. Keyboard injection may not work.", e);
-                // Create a dummy enigo that will fail on use
-                panic!("Failed to initialize keyboard: {:?}", e);
+                tracing::warn!("Failed to create Enigo instance: {:?}. Keyboard injection disabled. Please grant accessibility permissions.", e);
+                tracing::warn!("Go to System Preferences > Privacy & Security > Accessibility to grant permission.");
+                None
             }
         };
 
@@ -73,6 +76,11 @@ impl KeyboardInjector {
             running: AtomicBool::new(false),
             last_inject: AtomicBool::new(false),
         }
+    }
+
+    /// 检查键盘注入是否可用
+    pub fn is_available(&self) -> bool {
+        self.enigo.is_some()
     }
 
     /// 注入文本
@@ -88,36 +96,45 @@ impl KeyboardInjector {
         }
 
         self.last_inject.store(true, Ordering::SeqCst);
+        let delay_ms = self.config.char_delay_ms;
+
+        let enigo = match self.enigo.as_mut() {
+            Some(e) => e,
+            None => {
+                tracing::warn!("Keyboard injection not available - no accessibility permissions");
+                return Err(InputError::PermissionDenied("Keyboard injection not available".to_string()));
+            }
+        };
 
         for ch in text.chars() {
-            self.inject_char(ch)?;
-            self.delay();
+            Self::inject_char(enigo, ch)?;
+            Self::delay(delay_ms);
         }
 
         Ok(())
     }
 
     /// 注入单个字符
-    fn inject_char(&mut self, ch: char) -> Result<(), InputError> {
+    fn inject_char(enigo: &mut Enigo, ch: char) -> Result<(), InputError> {
         match ch {
             // 可打印字符
             c if c.is_ascii_alphanumeric() || c.is_ascii_punctuation() || c == ' ' => {
-                self.enigo.text(&c.to_string())
+                enigo.text(&c.to_string())
                     .map_err(|_e| InputError::InjectionFailed("Failed to type character".to_string()))?;
             }
             // 换行符
             '\n' | '\r' => {
-                self.enigo.key(Key::Return, enigo::Direction::Click)
+                enigo.key(Key::Return, enigo::Direction::Click)
                     .map_err(|_e| InputError::InjectionFailed("Failed to press Return".to_string()))?;
             }
             // Tab
             '\t' => {
-                self.enigo.key(Key::Tab, enigo::Direction::Click)
+                enigo.key(Key::Tab, enigo::Direction::Click)
                     .map_err(|_e| InputError::InjectionFailed("Failed to press Tab".to_string()))?;
             }
             // 退格
             '\x08' => {
-                self.enigo.key(Key::Backspace, enigo::Direction::Click)
+                enigo.key(Key::Backspace, enigo::Direction::Click)
                     .map_err(|_e| InputError::InjectionFailed("Failed to press Backspace".to_string()))?;
             }
             // 其他控制字符，跳过
@@ -136,30 +153,54 @@ impl KeyboardInjector {
 
     /// 注入单个键
     pub fn inject_key(&mut self, key: Key) -> Result<(), InputError> {
-        self.enigo.key(key, enigo::Direction::Click)
+        let enigo = match self.enigo.as_mut() {
+            Some(e) => e,
+            None => {
+                return Err(InputError::PermissionDenied("Keyboard injection not available".to_string()));
+            }
+        };
+        enigo.key(key, enigo::Direction::Click)
             .map_err(|_e| InputError::InjectionFailed("Failed to press key".to_string()))?;
         Ok(())
     }
 
     /// 按下并释放键
     pub fn tap_key(&mut self, key: Key) -> Result<(), InputError> {
-        self.enigo.key(key, enigo::Direction::Press)
+        let enigo = match self.enigo.as_mut() {
+            Some(e) => e,
+            None => {
+                return Err(InputError::PermissionDenied("Keyboard injection not available".to_string()));
+            }
+        };
+        enigo.key(key, enigo::Direction::Press)
             .map_err(|_e| InputError::InjectionFailed("Failed to press key".to_string()))?;
-        self.enigo.key(key, enigo::Direction::Release)
+        enigo.key(key, enigo::Direction::Release)
             .map_err(|_e| InputError::InjectionFailed("Failed to release key".to_string()))?;
         Ok(())
     }
 
     /// 按下修饰键
     pub fn press_key(&mut self, key: Key) -> Result<(), InputError> {
-        self.enigo.key(key, enigo::Direction::Press)
+        let enigo = match self.enigo.as_mut() {
+            Some(e) => e,
+            None => {
+                return Err(InputError::PermissionDenied("Keyboard injection not available".to_string()));
+            }
+        };
+        enigo.key(key, enigo::Direction::Press)
             .map_err(|_e| InputError::InjectionFailed("Failed to press key".to_string()))?;
         Ok(())
     }
 
     /// 释放修饰键
     pub fn release_key(&mut self, key: Key) -> Result<(), InputError> {
-        self.enigo.key(key, enigo::Direction::Release)
+        let enigo = match self.enigo.as_mut() {
+            Some(e) => e,
+            None => {
+                return Err(InputError::PermissionDenied("Keyboard injection not available".to_string()));
+            }
+        };
+        enigo.key(key, enigo::Direction::Release)
             .map_err(|_e| InputError::InjectionFailed("Failed to release key".to_string()))?;
         Ok(())
     }
@@ -169,37 +210,44 @@ impl KeyboardInjector {
     pub fn inject_shortcut(&mut self, key: Key, ctrl: bool, alt: bool, shift: bool) -> Result<(), InputError> {
         use enigo::Direction;
 
+        let enigo = match self.enigo.as_mut() {
+            Some(e) => e,
+            None => {
+                return Err(InputError::PermissionDenied("Keyboard injection not available".to_string()));
+            }
+        };
+
         // 模拟修饰键按下
         if ctrl {
-            self.enigo.key(Key::Control, Direction::Press)
+            enigo.key(Key::Control, Direction::Press)
                 .map_err(|_e| InputError::InjectionFailed("Failed to press Control".to_string()))?;
         }
         if alt {
-            self.enigo.key(Key::Alt, Direction::Press)
+            enigo.key(Key::Alt, Direction::Press)
                 .map_err(|_e| InputError::InjectionFailed("Failed to press Alt".to_string()))?;
         }
         if shift {
-            self.enigo.key(Key::Shift, Direction::Press)
+            enigo.key(Key::Shift, Direction::Press)
                 .map_err(|_e| InputError::InjectionFailed("Failed to press Shift".to_string()))?;
         }
 
         // 按下目标键
-        self.enigo.key(key, Direction::Press)
+        enigo.key(key, Direction::Press)
             .map_err(|_e| InputError::InjectionFailed("Failed to press key".to_string()))?;
-        self.enigo.key(key, Direction::Release)
+        enigo.key(key, Direction::Release)
             .map_err(|_e| InputError::InjectionFailed("Failed to release key".to_string()))?;
 
         // 释放修饰键 (反向顺序)
         if shift {
-            self.enigo.key(Key::Shift, Direction::Release)
+            enigo.key(Key::Shift, Direction::Release)
                 .map_err(|_e| InputError::InjectionFailed("Failed to release Shift".to_string()))?;
         }
         if alt {
-            self.enigo.key(Key::Alt, Direction::Release)
+            enigo.key(Key::Alt, Direction::Release)
                 .map_err(|_e| InputError::InjectionFailed("Failed to release Alt".to_string()))?;
         }
         if ctrl {
-            self.enigo.key(Key::Control, Direction::Release)
+            enigo.key(Key::Control, Direction::Release)
                 .map_err(|_e| InputError::InjectionFailed("Failed to release Control".to_string()))?;
         }
 
@@ -207,9 +255,9 @@ impl KeyboardInjector {
     }
 
     /// 延迟
-    fn delay(&self) {
-        if self.config.char_delay_ms > 0 {
-            std::thread::sleep(Duration::from_millis(self.config.char_delay_ms));
+    fn delay(delay_ms: u64) {
+        if delay_ms > 0 {
+            std::thread::sleep(Duration::from_millis(delay_ms));
         }
     }
 
